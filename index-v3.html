@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#B5121B">
+<title>Lancaster Spaces</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --red: #B5121B; --grey: #555656;
+    --bg: #555656; --surface: #FFFFFF; --ink: #000000; --muted: #555656; --line: #D6D6D6;
+    --brand: #B5121B;
+    --on-bg: #FFFFFF; --on-bg-soft: rgba(255,255,255,.72);
+    --ok: #1B7F4B; --busy: #A5640A; --full: #B91C1C;
+    --r: 6px;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { -webkit-tap-highlight-color: transparent; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 400 15px/1.45 'Instrument Sans', system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  header {
+    background: var(--red); color: #fff;
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .bar { max-width: 760px; margin: 0 auto; padding: 0 16px; }
+  header .bar { height: 52px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-weight: 600; font-size: 16px; }
+  .logo b { color: #000; font-weight: 600; }
+  #clock { color: rgba(255,255,255,.85); font-size: 13px; }
+
+  main { max-width: 760px; margin: 0 auto; padding: 36px 16px 56px; }
+  h1 { font-weight: 600; font-size: clamp(28px, 6vw, 40px); line-height: 1.1; letter-spacing: -.02em; color: var(--on-bg); }
+  .how { color: var(--on-bg-soft); font-size: 14px; max-width: 46ch; margin-top: 10px; }
+  .split { display: flex; gap: 3px; height: 6px; margin: 20px 0 36px; }
+  .split span { border-radius: 2px; }
+
+  h2 { font-size: 13px; font-weight: 600; color: var(--on-bg-soft); margin: 28px 0 8px; }
+  .group { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+  .row {
+    display: grid; grid-template-columns: 22px 1fr auto; gap: 10px 14px; align-items: center;
+    padding: 14px 16px 14px 13px; border-left: 3px solid var(--c);
+  }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row:first-child { border-top-left-radius: var(--r); border-top-right-radius: var(--r); }
+  .gauge { display: flex; align-items: flex-end; gap: 2px; height: 18px; }
+  .gauge i { width: 5px; border-radius: 1.5px; }
+  .name { font-weight: 600; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .st { font-weight: 600; color: var(--c); }
+
+  .votes { display: flex; border: 1px solid var(--ink); border-radius: var(--r); overflow: hidden; }
+  .votes button {
+    font: inherit; font-size: 13px; font-weight: 600; color: var(--ink); background: transparent;
+    border: 0; padding: 8px 14px; min-width: 62px; cursor: pointer;
+  }
+  .votes button + button { border-left: 1px solid var(--ink); }
+  .votes button:hover { background: color-mix(in srgb, var(--c) 14%, transparent); }
+  .votes button:active { background: color-mix(in srgb, var(--c) 28%, transparent); }
+  .cd { font-size: 13px; color: var(--muted); text-align: right; }
+  .cd b { color: var(--ink); font-weight: 600; }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; box-shadow: 0 0 0 5px #fff; }
+
+  @media (max-width: 560px) {
+    .row { grid-template-columns: 22px 1fr; }
+    .votes, .cd { grid-column: 1 / -1; }
+    .votes button { flex: 1; padding: 11px 0; }
+    .cd { text-align: left; }
+  }
+
+  footer { margin-top: 36px; color: var(--on-bg-soft); font-size: 12px; max-width: 60ch; }
+  #toast {
+    position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    transform: translate(-50%, 12px); opacity: 0; pointer-events: none;
+    background: #000; color: #fff; font-size: 14px; padding: 9px 16px; border-radius: var(--r);
+    transition: opacity .2s, transform .2s;
+  }
+  #toast.on { opacity: 1; transform: translate(-50%, 0); }
+  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <span class="logo">Lancaster <b>Spaces</b></span>
+    <span id="clock" aria-label="Current time"></span>
+  </div>
+</header>
+
+<main>
+  <h1 id="headline">Where can you study right now?</h1>
+  <div class="split" id="split" aria-hidden="true"></div>
+  <p class="how">Report what you see on campus!</p>
+  <div id="list"></div>
+  <footer>Unofficial, not ran by the uni :]</footer>
+</main>
+
+<div id="toast" role="status"></div>
+
+<script>
+(() => {
+  const COOLDOWN = 5 * 60 * 1000;
+  const LEVELS = [
+    { label: 'Plenty of desks', short: 'Plenty', color: 'var(--ok)' },
+    { label: 'Busy',            short: 'Busy',   color: 'var(--busy)' },
+    { label: 'Full',            short: 'Full',   color: 'var(--full)' }
+  ];
+
+  const spaces = [
+    { id: 'lib-a',    area: 'Library, North Spine', name: 'Library A floor', sub: 'Group and collaborative zones',        counts: [0, 2, 3], ago: 3 },
+    { id: 'lib-b',    area: 'Library, North Spine', name: 'Library B floor', sub: 'Considerate study and Reading Room',   counts: [0, 2, 3], ago: 3 },
+    { id: 'lib-c',    area: 'Library, North Spine', name: 'Library C floor', sub: 'Strictly silent study',                counts: [0, 1, 4], ago: 6 },
+
+    { id: 'learning', area: 'Teaching buildings',   name: 'The Learning Zone',     sub: 'Alexandra Square, group pods and tech hubs', counts: [2, 1, 0], ago: 9 },
+    { id: 'lums',     area: 'Teaching buildings',   name: 'LUMS Atrium and Hub',   sub: 'Management School open seating and cafe',    counts: [3, 1, 0], ago: 14 },
+    { id: 'infolab',  area: 'Teaching buildings',   name: 'InfoLab21 Common Room', sub: 'Computing, group screens',                   counts: [1, 3, 0], ago: 2 },
+    { id: 'lec',      area: 'Teaching buildings',   name: 'LEC Atrium',            sub: 'Environment Centre group space',             counts: [0, 4, 1], ago: 5 },
+    { id: 'charles',  area: 'Teaching buildings',   name: 'Charles Carter Foyer',  sub: 'Central atrium and breakout pods',           counts: [2, 0, 1], ago: 11 },
+
+    { id: 'grad',     area: 'Colleges and arts',    name: 'Grad College Hub',   sub: '24/7 postgraduate hub and PC labs',  counts: [1, 1, 2], ago: 7 },
+    { id: 'bowland',  area: 'Colleges and arts',    name: 'Bowland College',    sub: 'Common room and learning spaces',    counts: [2, 1, 0], ago: 10 },
+    { id: 'county',   area: 'Colleges and arts',    name: 'County College Hub', sub: 'South-west campus social space',     counts: [1, 2, 0], ago: 15 },
+    { id: 'fylde',    area: 'Colleges and arts',    name: 'Fylde College',      sub: 'Furness and Grizedale corridor desks', counts: [2, 0, 1], ago: 8 },
+    { id: 'lica',     area: 'Colleges and arts',    name: 'LICA Building',      sub: 'Contemporary Arts open foyer',       counts: [3, 0, 0], ago: 12 }
+  ];
+
+  const now = () => Date.now();
+  spaces.forEach((s, i) => {
+    s.order = i;
+    s.w = [...s.counts];                      
+    s.n = s.counts.reduce((a, b) => a + b, 0);
+    s.updated = now() - s.ago * 60000;
+    s.t = 0; s.v = -1;                        
+  });
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('ls-cooldowns') || '{}');
+    spaces.forEach(s => { if (saved[s.id]) { s.t = saved[s.id].t; s.v = saved[s.id].v; } });
+  } catch (e) {}
+  const save = () => {
+    try { sessionStorage.setItem('ls-cooldowns', JSON.stringify(Object.fromEntries(spaces.map(s => [s.id, { t: s.t, v: s.v }])))); } catch (e) {}
+  };
+
+  const level = s => s.w.indexOf(Math.max(...s.w));
+  const remaining = s => Math.max(0, COOLDOWN - (now() - s.t));
+  const fmtAgo = ms => { const m = Math.floor(ms / 60000); return m < 1 ? 'just now' : m + ' min ago'; };
+  const fmtCd = ms => { const t = Math.ceil(ms / 1000); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+  const $ = id => document.getElementById(id);
+
+  const gauge = li => `<span class="gauge" aria-hidden="true">${[8, 13, 18].map((h, i) =>
+    `<i style="height:${h}px;background:${i <= li ? LEVELS[li].color : 'var(--line)'}"></i>`).join('')}</span>`;
+
+  function rowHTML(s) {
+    const li = level(s), L = LEVELS[li], locked = remaining(s) > 0;
+    const share = s.n ? `${s.counts[li]} of ${s.n} reports` : 'No reports';
+    const control = locked
+      ? `<p class="cd" data-cd="${s.id}">You reported ${LEVELS[s.v].short.toLowerCase()}. Update again in <b>${fmtCd(remaining(s))}</b></p>`
+      : `<div class="votes" role="group" aria-label="Report ${s.name}">${LEVELS.map((l, i) =>
+          `<button style="--c:${l.color}" data-id="${s.id}" data-v="${i}" aria-label="Report ${s.name} as ${l.label}">${l.short}</button>`).join('')}</div>`;
+    return `
+      <div class="row" style="--c:${L.color}">
+        ${gauge(li)}
+        <div>
+          <div class="name">${s.name}</div>
+          <div class="sub">${s.sub}</div>
+          <div class="meta"><span class="st">${L.label}</span>, ${share}, <span data-ago="${s.id}">${fmtAgo(now() - s.updated)}</span></div>
+        </div>
+        ${control}
+      </div>`;
+  }
+
+  function render() {
+    const areas = [...new Set(spaces.map(s => s.area))];
+    $('list').innerHTML = areas.map(a => {
+      const rows = spaces.filter(s => s.area === a).sort((x, y) => level(x) - level(y) || x.order - y.order);
+      return `<h2>${a}</h2><div class="group">${rows.map(rowHTML).join('')}</div>`;
+    }).join('');
+
+    const tally = [0, 0, 0];
+    spaces.forEach(s => tally[level(s)]++);
+    const free = tally[0];
+    $('headline').textContent = free === 0 ? 'Nowhere has free desks right now.'
+      : `${free} of ${spaces.length} spaces have free desks.`;
+    $('split').innerHTML = LEVELS.map((l, i) =>
+      tally[i] ? `<span style="flex:${tally[i]};background:${l.color}"></span>` : '').join('');
+  }
+
+  let toastT;
+  function toast(msg) {
+    const el = $('toast'); el.textContent = msg; el.classList.add('on');
+    clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2200);
+  }
+
+  $('list').addEventListener('click', e => {
+    const b = e.target.closest('button[data-v]');
+    if (!b) return;
+    const s = spaces.find(x => x.id === b.dataset.id);
+    if (!s || remaining(s) > 0) return;
+    const v = +b.dataset.v;
+    s.counts[v]++; s.n++;
+    s.w = s.w.map((c, i) => i === v ? c + 1 : +(c * 0.7).toFixed(2));
+    s.updated = s.t = now(); s.v = v;
+    save(); render();
+    if (navigator.vibrate) navigator.vibrate(12);
+    toast(`${s.name}: ${LEVELS[v].label}`);
+  });
+
+  function tick() {
+    $('clock').textContent = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    let expired = false;
+    spaces.forEach(s => {
+      const ago = document.querySelector(`[data-ago="${s.id}"]`);
+      if (ago) ago.textContent = fmtAgo(now() - s.updated);
+      const cd = document.querySelector(`[data-cd="${s.id}"]`);
+      if (!cd) return;
+      if (remaining(s) <= 0) expired = true;
+      else cd.querySelector('b').textContent = fmtCd(remaining(s));
+    });
+    if (expired) render();
+  }
+
+  render(); tick();
+  setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>
