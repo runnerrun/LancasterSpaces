@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#121416">
+<title>Lancaster Spaces</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: { extend: {
+    fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+    colors: { ink: '#B5121B', slate2: '#FFFFFF', rose: '#990000', crimson: '#C41E3A',
+              mint: '#10B981', amber: '#F59E0B', packed: '#B91C1C' }
+  } }
+}
+</script>
+<style>
+  body { background: 	#555656; -webkit-tap-highlight-color: transparent; }
+    .vote { transition: transform .15s ease, background-color .2s, color .2s, border-color .2s; }
+  .vote:active:not(:disabled) { transform: scale(.94); }
+  .vote:disabled { cursor: not-allowed; }
+  .card { transition: border-color .3s, box-shadow .3s; }
+  .pop { animation: pop .45s cubic-bezier(.2,1.6,.4,1); }
+  @keyframes pop { 0% { transform: scale(.96); } 100% { transform: scale(1); } }
+  .pulse-dot { animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .pop, .pulse-dot { animation: none; } .vote { transition: none; } }
+</style>
+</head>
+<body class="font-sans text-#555656 antialiased min-h-screen">
+
+<header class="sticky top-0 z-20 border-b border-white/10 bg-ink backdrop-blur-xl" style="padding-top: env(safe-area-inset-top, 0px)">
+  <div class="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <span class="inline-block w-2 h-6 rounded-full bg-rose"></span>
+      <h1 class="text-[17px] font-extrabold tracking-tight">Lancaster<span class="ml-1 px-2 py-0.5 rounded-full bg-rose text-white text-[13px] font-bold">Spaces</span></h1>
+    </div>
+    <div class="text-right leading-tight">
+      <div class="flex items-center justify-end gap-1.5 text-[11px] text-zinc-400"><span class="w-1.5 h-1.5 rounded-full bg-mint pulse-dot"></span>Last updated</div>
+      <div id="clock" class="text-sm font-semibold tabular-nums">--:--:--</div>
+    </div>
+  </div>
+</header>
+
+<main class="relative z-10 max-w-5xl mx-auto px-4 pt-6 pb-16">
+  <section class="mb-6">
+    <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight leading-[1.05]">Where can you<br>actually sit down?</h2>
+    <p class="mt-3 text-zinc-400 text-sm max-w-md">Tap a status to report what you see on campus. Anonymous, no sign-in, and each space can be updated every 5 minutes.</p>
+    <div id="summary" class="mt-4 flex flex-wrap gap-2 text-xs"></div>
+  </section>
+
+  <div id="grid" class="grid grid-cols-2 lg:grid-cols-6 gap-3 auto-rows-auto"></div>
+
+  <p class="mt-8 text-center text-[11px] text-zinc-500">Student-run and unofficial. Not affiliated with Lancaster University. Reports live in your browser only in this prototype.</p>
+</main>
+
+<div id="toast" class="fixed left-1/2 -translate-x-1/2 bottom-6 z-30 px-4 py-2.5 rounded-full bg-slate2 border border-white/15 text-sm font-medium shadow-2xl opacity-0 translate-y-4 transition-all duration-300 pointer-events-none" style="margin-bottom: env(safe-area-inset-bottom, 0px)"></div>
+
+<script>
+(() => {
+  const COOLDOWN = 5 * 60 * 1000;
+  const LEVELS = [
+    { key: 'open',   label: 'Plenty of Desks', short: 'Plenty',   color: '#10B981', text: 'text-mint',   bg: 'bg-mint/15',   border: 'border-mint/40' },
+    { key: 'busy',   label: 'Busy',    short: 'Busy',     color: '#F59E0B', text: 'text-amber',  bg: 'bg-amber/15',  border: 'border-amber/40' },
+    { key: 'full', label: 'Full',          short: 'Full',   color: '#B91C1C', text: 'text-red-400', bg: 'bg-packed/20', border: 'border-packed/60' }
+  ];
+
+
+const spaces = [
+    // --- Hero Full-Width Rows (Library Lettered Floors) ---
+    { id: 'lib-a',   name: 'Library A Floor',      sub: 'North Spine / Group & collaborative zones', span: 'col-span-2 lg:col-span-6', big: true, counts: [0, 2, 3], ago: 3 },
+    { id: 'lib-b',   name: 'Library B Floor',      sub: 'North Spine / Considerate study & Reading Room', span: 'col-span-2 lg:col-span-6', big: true, counts: [0, 2, 3], ago: 3 },
+    { id: 'lib-c',   name: 'Library C Floor',      sub: 'North Spine / Strictly silent study zone', span: 'col-span-2 lg:col-span-6', big: true, counts: [0, 1, 4], ago: 6 },
+
+    // --- Row 4: Big Heavy Hitters ---
+    { id: 'learning',name: 'The Learning Zone',    sub: 'Alexandra Square / Group pods & tech hubs', span: 'col-span-2 lg:col-span-3', counts: [2, 1, 0], ago: 9 }, 
+    { id: 'lums',    name: 'LUMS Atrium & Hub',    sub: 'Management School open seating & cafe areas', span: 'col-span-2 lg:col-span-3', counts: [3, 1, 0], ago: 14 }, 
+
+    // --- Row 5: The College Hubs & Labs ---
+    { id: 'infolab', name: 'InfoLab21 Common Room',sub: 'Computing, group screens & glass views', span: 'col-span-2 lg:col-span-2', counts: [1, 3, 0], ago: 2 }, 
+    { id: 'lec',     name: 'LEC Atrium',           sub: 'Environment Centre plant-filled group space', span: 'col-span-2 lg:col-span-2', counts: [0, 4, 1], ago: 5 }, 
+    { id: 'grad',    name: 'Grad College Hub',     sub: '24/7 Postgraduate Social Hub & PC Labs', span: 'col-span-2 lg:col-span-2', counts: [1, 1, 2], ago: 7 },
+
+    // --- Row 6: Alternative Spots ---
+    { id: 'bowland', name: 'Bowland College',      sub: 'Common room & learning spaces', span: 'col-span-2 lg:col-span-2', counts: [2, 1, 0], ago: 10 },
+    { id: 'county',  name: 'County College Hub',   sub: 'South-West campus social space & Diner', span: 'col-span-2 lg:col-span-2', counts: [1, 2, 0], ago: 15 },
+    { id: 'charles', name: 'Charles Carter Foyer', sub: 'Central atrium & open breakout pods', span: 'col-span-2 lg:col-span-2', counts: [2, 0, 1], ago: 11 },
+
+    // --- Row 7: Peripheral / Creative Spaces ---
+    { id: 'fylde',   name: 'Fylde College',        sub: 'Furness/Grizedale corridor desks', span: 'col-span-2 lg:col-span-3', counts: [2, 0, 1], ago: 8 },
+    { id: 'lica',    name: 'LICA Building',        sub: 'Contemporary Arts open foyer', span: 'col-span-2 lg:col-span-3', counts: [3, 0, 0], ago: 12 }
+];
+
+  const now = () => Date.now();
+  spaces.forEach(s => { s.updated = now() - s.ago * 60000; s.voted = 0; });
+
+
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('ls-cooldowns') || '{}');
+    spaces.forEach(s => { s.voted = saved[s.id] || 0; });
+  } catch (e) {}
+  const saveCooldowns = () => {
+    try { sessionStorage.setItem('ls-cooldowns', JSON.stringify(Object.fromEntries(spaces.map(s => [s.id, s.voted])))); } catch (e) {}
+  };
+
+  const level = s => s.counts.indexOf(Math.max(...s.counts));
+  const remaining = s => Math.max(0, COOLDOWN - (now() - s.voted));
+  const fmtAgo = ms => { const m = Math.floor(ms / 60000); return m < 1 ? 'Just now' : m + ' min ago'; };
+  const fmtCd = ms => { const t = Math.ceil(ms / 1000); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+
+  const grid = document.getElementById('grid');
+
+  function cardHTML(s) {
+    const L = LEVELS[level(s)];
+    const total = s.counts.reduce((a, b) => a + b, 0) || 1;
+    const locked = remaining(s) > 0;
+    const bar = LEVELS.map((l, i) =>
+      `<span class="h-1.5 rounded-full" style="flex:${Math.max(s.counts[i], .001)};background:${l.color};opacity:${i === level(s) ? 1 : .35}"></span>`).join('');
+    const btns = LEVELS.map((l, i) => {
+      const active = i === level(s) && locked;
+      return `<button data-id="${s.id}" data-v="${i}" ${locked ? 'disabled' : ''}
+        class="vote flex-1 py-2.5 rounded-xl border text-[12px] font-semibold ${active ? l.bg + ' ' + l.border + ' ' + l.text : 'border-white/10 bg-white/[.03] text-zinc-300'} ${locked ? 'opacity-50' : 'hover:bg-white/10'}"
+        aria-label="Report ${s.name} ${s.sub} as ${l.label}">${l.short}</button>`;
+    }).join('');
+    return `
+      <div class="p-4 ${s.big ? 'sm:p-5' : ''}">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h3 class="font-bold ${s.big ? 'text-xl' : 'text-[15px]'} leading-tight">${s.name}</h3>
+            <p class="text-xs text-zinc-400 mt-0.5">${s.sub}</p>
+          </div>
+          <span class="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${L.bg} ${L.border} ${L.text} text-[11px] font-bold whitespace-nowrap">
+            <span class="w-1.5 h-1.5 rounded-full" style="background:${L.color}"></span>${L.label}
+          </span>
+        </div>
+        <div class="${s.big ? 'mt-8' : 'mt-5'}">
+          <div class="flex gap-1 mb-2">${bar}</div>
+          <div class="flex justify-between text-[11px] text-zinc-500 mb-3">
+            <span>${total === 1 && !s.counts.some(Boolean) ? 0 : total} reports</span>
+            <span data-ago="${s.id}">${fmtAgo(now() - s.updated)}</span>
+          </div>
+          <div class="flex gap-2">${btns}</div>
+          <p data-cd="${s.id}" class="${locked ? '' : 'hidden'} mt-2 text-center text-[11px] text-zinc-500">Thanks. You can report again in <span class="tabular-nums font-semibold text-zinc-300">${fmtCd(remaining(s))}</span></p>
+        </div>
+      </div>`;
+  }
+
+  function render(onlyId) {
+    spaces.forEach(s => {
+      if (onlyId && s.id !== onlyId) return;
+      let el = document.getElementById('c-' + s.id);
+      const L = LEVELS[level(s)];
+      if (!el) {
+        el = document.createElement('article');
+        el.id = 'c-' + s.id;
+        grid.appendChild(el);
+      }
+      el.className = `card ${s.span} rounded-2xl border bg-slate2 border-white/10`;
+      el.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,.04), 0 0 0 0 transparent`;
+      el.innerHTML = cardHTML(s);
+    });
+    renderSummary();
+  }
+
+  function renderSummary() {
+    const tally = [0, 0, 0];
+    spaces.forEach(s => tally[level(s)]++);
+    document.getElementById('summary').innerHTML = LEVELS.map((l, i) =>
+      `<span class="px-3 py-1.5 rounded-full border ${l.border} ${l.bg} ${l.text} font-semibold">${tally[i]} ${l.label.toLowerCase()}</span>`).join('');
+  }
+
+  const toastEl = document.getElementById('toast');
+  let toastT;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.remove('opacity-0', 'translate-y-4');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => toastEl.classList.add('opacity-0', 'translate-y-4'), 2200);
+  }
+
+  grid.addEventListener('click', e => {
+    const b = e.target.closest('button[data-v]');
+    if (!b) return;
+    const s = spaces.find(x => x.id === b.dataset.id);
+    if (!s || remaining(s) > 0) return;
+    const v = +b.dataset.v;
+    s.counts = s.counts.map((c, i) => i === v ? c + 1 : +(c * 0.7).toFixed(2)); // newer reports outweigh older ones
+    s.updated = s.voted = now();
+    saveCooldowns();
+    render(s.id);
+    document.getElementById('c-' + s.id).classList.add('pop');
+    if (navigator.vibrate) navigator.vibrate(12);
+    toast(`${s.name} (${s.sub}): ${LEVELS[v].label}`);
+  });
+
+
+  const clock = document.getElementById('clock');
+  function tick() {
+    clock.textContent = new Date().toLocaleTimeString('en-GB');
+    spaces.forEach(s => {
+      const ago = document.querySelector(`[data-ago="${s.id}"]`);
+      if (ago) ago.textContent = fmtAgo(now() - s.updated);
+      const cd = document.querySelector(`[data-cd="${s.id}"]`);
+      if (!cd || cd.classList.contains('hidden')) return;
+      if (remaining(s) <= 0) render(s.id);
+      else cd.querySelector('span').textContent = fmtCd(remaining(s));
+    });
+  }
+
+  render();
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>
